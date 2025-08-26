@@ -1,0 +1,7 @@
+.venv/
+logs/
+.vscode/
+__pycache__/
+data/
+models/
+.ruff_cache/

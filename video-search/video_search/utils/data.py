@@ -68,7 +68,7 @@ class VideoQueryDataset(Dataset):
             padding="max_length",
             max_length=self.max_text_length,
             return_tensors="pt",
-        )
+        )  # type: ignore
 
         return {
             "video_frames": video_frames,  # [num_frames, 3, H, W]
@@ -77,7 +77,7 @@ class VideoQueryDataset(Dataset):
             "target_index": torch.tensor(target_index, dtype=torch.long),  # scalar
             "video_path": triplet.video_path,  # for debugging
             "queries": all_queries,  # for debugging
-        }
+        }  # type: ignore
 
 
 def download_youtube_clip(
@@ -160,7 +160,7 @@ def load_msrvtt_dataset(
     # Use train split
     train_data = dataset["train"]
     if max_videos:
-        train_data = train_data.select(range(min(max_videos, len(train_data))))
+        train_data = train_data.select(range(min(max_videos, len(train_data))))  # type: ignore
 
     # Create video directory
     video_dir = os.path.join(data_dir, "videos")

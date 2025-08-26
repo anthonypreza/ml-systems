@@ -41,16 +41,6 @@ def load_model_and_index(
         )
 
     print("Loading trained model...")
-    # Backward-compat: alias legacy module names referenced in old checkpoints
-    import types
-    try:
-        from video_search.core.config import VideoSearchConfig as _VSC
-        legacy_cfg_mod = types.ModuleType("config")
-        legacy_cfg_mod.VideoSearchConfig = _VSC
-        sys.modules.setdefault("config", legacy_cfg_mod)
-    except Exception:
-        pass
-
     checkpoint = torch.load(
         config.model_save_path, map_location=config.device, weights_only=False
     )
@@ -127,7 +117,7 @@ def interactive_search(
                     "  • Index type: Pre-computed embedding cache with dot product similarity"
                 )
                 print(
-                    f"  • Model device: {model.video_encoder.resnet.conv1.weight.device}"
+                    f"  • Model device: {model.video_encoder.resnet.conv1.weight.device}"  # type: ignore
                 )
                 print(
                     f"  • Embedding dimension: {model.video_encoder.projection.out_features}"

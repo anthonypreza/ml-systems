@@ -12,7 +12,6 @@ import argparse
 from typing import List, Tuple
 
 import sys
-import os
 
 # Ensure the project root (containing the `video_search` package) is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

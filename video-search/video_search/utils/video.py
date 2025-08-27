@@ -81,7 +81,7 @@ class VideoProcessor:
 
     def create_dummy_video(self, save_path: str, duration_seconds: int = 5):
         """Create a dummy video for testing purposes"""
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
         out = cv2.VideoWriter(save_path, fourcc, 30.0, (640, 480))
 
         for i in range(duration_seconds * 30):  # 30 FPS

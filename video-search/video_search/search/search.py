@@ -36,7 +36,7 @@ def search_videos(
     similarities = []
 
     with torch.no_grad():
-        for video_path in tqdm(video_paths, desc=f"Searching for '{query}'"):
+        for video_path in tqdm(video_paths, desc=f"Searching for '{query}'"):  # type: ignore
             try:
                 # Encode video
                 video_frames = model.video_processor.extract_frames(video_path)

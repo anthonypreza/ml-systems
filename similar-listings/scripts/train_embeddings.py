@@ -151,12 +151,12 @@ def main():
 
         # Early stopping and model saving logic
         current_mrr = ranking_metrics["mrr"]
-        
+
         if current_mrr > best_mrr + min_improvement:
             # Significant improvement found
             best_mrr = current_mrr
             patience_counter = 0
-            
+
             # Save model
             model_path = os.path.join(args.output_dir, "best_embedding_model.pth")
             torch.save(
@@ -194,11 +194,13 @@ def main():
             # No significant improvement
             patience_counter += 1
             print(f"No improvement. Patience: {patience_counter}/{patience}")
-            
+
             # Early stopping check
             if patience_counter >= patience:
                 print(f"\n🛑 Early stopping triggered after {epoch + 1} epochs")
-                print(f"Best MRR: {best_mrr:.4f} (no improvement for {patience} epochs)")
+                print(
+                    f"Best MRR: {best_mrr:.4f} (no improvement for {patience} epochs)"
+                )
                 break
 
     print(f"\nTraining completed! Best MRR: {best_mrr:.4f}")

@@ -19,9 +19,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from video_search.core.config import VideoSearchConfig
-from video_search.core.model import VideoTextContrastiveModel
-from video_search.search.search import search_videos_indexed
+from video_search.core.config import VideoSearchConfig  # noqa: E402
+from video_search.core.model import VideoTextContrastiveModel  # noqa: E402
+from video_search.search.search import search_videos_indexed  # noqa: E402
 
 
 def load_model_and_index(

@@ -10,6 +10,7 @@ This repository contains various ML projects and experiments, ranging from compu
 
 - **`sentiment-classification/`** - Text classification experiments with transformer models
 - **`video-search/`** - Multimodal video-text retrieval using contrastive learning
+- **`similar-listings/`** - Session-based recommendation system using neural embeddings
 
 See individual project directories for specific documentation and usage instructions.
 

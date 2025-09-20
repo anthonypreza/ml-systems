@@ -33,10 +33,12 @@ def load_model_and_index(
     # Load model
     # Backward-compat: alias legacy module names referenced in old checkpoints
     import types
+
     try:
         from video_search.core.config import VideoSearchConfig as _VSC
+
         legacy_cfg_mod = types.ModuleType("config")
-        legacy_cfg_mod.VideoSearchConfig = _VSC
+        legacy_cfg_mod.VideoSearchConfig = _VSC  # type: ignore
         sys.modules.setdefault("config", legacy_cfg_mod)
     except Exception:
         pass

@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Book Recommender</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      header { margin-bottom: 1rem; }
+      .row { display: flex; gap: 2rem; }
+      .col { flex: 1; min-width: 300px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; }
+      .book { padding: 0.5rem 0; border-bottom: 1px dashed #eee; }
+      .controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+      .pill { background: #f2f2f2; border-radius: 12px; padding: 0.1rem 0.5rem; font-size: 0.85rem; }
+      button { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #888; background: #fff; cursor: pointer; }
+      button:hover { background: #f5f5f5; }
+      select, input { padding: 0.35rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h2>Book Recommender (ONNX)</h2>
+      <div class="controls">
+        <label>User: <select id="userSelect"></select></label>
+        <label>Top K: <input id="topK" type="number" min="1" max="50" value="10" /></label>
+        <label><input id="filterSeen" type="checkbox" checked /> Hide already read</label>
+        <button id="recBtn">Get Recommendations</button>
+        <span class="pill" id="status"></span>
+      </div>
+    </header>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <h3>Recommendations</h3>
+          <div id="recs"></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <h3>Already Interacted</h3>
+          <div id="history"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const userSel = document.getElementById('userSelect');
+      const recsEl = document.getElementById('recs');
+      const histEl = document.getElementById('history');
+      const topKInput = document.getElementById('topK');
+      const filterSeenChk = document.getElementById('filterSeen');
+      const recBtn = document.getElementById('recBtn');
+
+      // Track previously recommended in localStorage for re-ranking
+      function getExcludeSet(userId) {
+        const key = `exclude_${userId}`;
+        try {
+          const val = JSON.parse(localStorage.getItem(key) || '[]');
+          return new Set(val);
+        } catch { return new Set(); }
+      }
+      function addExcluded(userId, bookIds) {
+        const key = `exclude_${userId}`;
+        const s = getExcludeSet(userId);
+        bookIds.forEach(id => s.add(String(id)));
+        localStorage.setItem(key, JSON.stringify([...s]));
+      }
+
+      function fmtBook(b) {
+        const meta = [b.author_name, b.publication_year, b.language_code, b.format].filter(Boolean).join(' • ');
+        return `<div class="book"><strong>${b.title || b.book_id}</strong><div>${meta}</div>${b.score !== undefined ? `<div>score: ${b.score.toFixed(4)}</div>`:''}</div>`;
+      }
+
+      async function fetchUsers() {
+        const res = await fetch('/users');
+        const data = await res.json();
+        userSel.innerHTML = '';
+        (data.users || []).forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.user_id; opt.textContent = `${u.user_id} (${u.count})`;
+          userSel.appendChild(opt);
+        });
+        if (userSel.value) await refresh(userSel.value);
+      }
+
+      async function refresh(userId) {
+        statusEl.textContent = 'Loading…';
+        const hist = await fetch(`/user/${encodeURIComponent(userId)}/history`);
+        const histData = await hist.json();
+        histEl.innerHTML = (histData.history || []).map(fmtBook).join('');
+        statusEl.textContent = '';
+      }
+
+      async function recommend() {
+        const userId = userSel.value;
+        const k = parseInt(topKInput.value || '10', 10);
+        const filterSeen = filterSeenChk.checked;
+        const exclude = [...getExcludeSet(userId)].join(',');
+        statusEl.textContent = 'Scoring…';
+        const res = await fetch(`/recommendations?user_id=${encodeURIComponent(userId)}&k=${k}&filter_seen=${filterSeen}&exclude=${encodeURIComponent(exclude)}`);
+        const data = await res.json();
+        const recs = data.recommendations || [];
+        recsEl.innerHTML = recs.map(fmtBook).join('');
+        addExcluded(userId, recs.map(r => r.book_id));
+        statusEl.textContent = `Returned ${recs.length}`;
+      }
+
+      userSel.addEventListener('change', () => refresh(userSel.value));
+      recBtn.addEventListener('click', recommend);
+
+      fetchUsers();
+    </script>
+  </body>
+  </html>
+

@@ -1,0 +1,8 @@
+fastapi==0.114.2
+uvicorn[standard]==0.30.6
+onnxruntime==1.19.2
+wandb==0.17.8
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.2
+python-multipart==0.0.9

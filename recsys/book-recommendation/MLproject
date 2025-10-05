@@ -1,0 +1,11 @@
+name: book-recommendation
+conda_env: conda.yaml
+
+entry_points:
+  main:
+    parameters:
+      interactions_sample: {type: integer, default: 100000}
+      books_sample: {type: integer, default: 100000}
+      authors_sample: {type: integer, default: 10000}
+      genres_sample: {type: integer, default: 10000}
+    command: "python run.py --interactions-sample {interactions_sample} --books-sample {books_sample} --authors-sample {authors_sample} --genres-sample {genres_sample}"

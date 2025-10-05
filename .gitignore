@@ -5,3 +5,11 @@ __pycache__/
 data/
 models/
 .ruff_cache/
+wandb/
+mlruns/
+artifacts/
+.env
+*.pth
+*.npy
+*.npz
+*.pkl

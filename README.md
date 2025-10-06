@@ -11,6 +11,9 @@ This repository contains various ML projects and experiments, ranging from compu
 - **`sentiment-classification/`** - Text classification experiments with transformer models
 - **`video-search/`** - Multimodal video-text retrieval using contrastive learning
 - **`similar-listings/`** - Session-based recommendation system using neural embeddings
+- **`ad-click-prediction/`** - Click-through rate modeling pipeline using XGBoost with sklearn preprocessing and SHAP diagnostics
+- **`recsys/`** - Recommendation experiments spanning Goodreads LTR (XGBoost + neural models) alongside Kaggle dataset
+- **`feature-store-lab`** - Example streaming pipeline for an online/offline feature store. 
 
 See individual project directories for specific documentation and usage instructions.
 

@@ -50,3 +50,12 @@ flink-*-standalonesession-*.log
 flink-web-ui/
 checkpoints/
 savepoints/
+
+wandb/
+mlruns/
+artifacts/
+.env
+*.pth
+*.npy
+*.npz
+*.pkl

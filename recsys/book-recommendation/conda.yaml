@@ -1,0 +1,10 @@
+name: book-recommendation
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - mlflow>=2.8.0
+      - wandb>=0.15.0

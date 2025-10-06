@@ -1,0 +1,41 @@
+name: book-recommendation-features
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      # Core data science libraries
+      - pandas>=2.0.0
+      - numpy>=1.24.0
+      - scikit-learn>=1.3.0
+
+      # Interactive plotting used in training reports
+      - plotly>=6.0.0
+
+      # Deep learning
+      - torch==2.8.0
+
+      # ML experiment tracking
+      - mlflow>=2.8.0
+      - wandb>=0.15.0
+
+      # Configuration and validation
+      - pydantic>=2.0.0
+      - pyyaml>=6.0
+
+      # Text processing (for future similarity features)
+      - textblob>=0.17.0
+
+      # Redis client (for future feature store)
+      - redis>=5.0.0
+
+      # Development and testing
+      - pytest>=7.0.0
+      - black>=23.0.0
+      - ruff>=0.1.0
+
+      # ONNX
+      - onnx==1.19.0
+      - onnxscript==0.5.1

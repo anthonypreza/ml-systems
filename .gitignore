@@ -5,6 +5,52 @@ __pycache__/
 data/
 models/
 .ruff_cache/
+
+# Scala
+*.class
+*.log
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+.metals
+metals.sbt
+.bsp
+.bloop
+
+# sbt specific
+.cache
+.history
+.lib/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+
+# Scala-IDE specific
+.scala_dependencies
+.worksheet
+
+# Flink
+.flink_history/
+.flink-conf/
+flink-conf.yaml
+log4j.properties
+log4j2.properties
+*.out
+*.pid
+flink-*-taskexecutor-*.log
+flink-*-jobmanager-*.log
+flink-*-standalonesession-*.log
+flink-web-ui/
+checkpoints/
+savepoints/
+
 wandb/
 mlruns/
 artifacts/

@@ -1,10 +1,11 @@
-from torch.utils.data import DataLoader
-
 import os
 import argparse
-
 import sys
-import os
+from pathlib import Path
+
+import torch
+from torch.utils.data import DataLoader
+
 
 # Ensure the project root (containing the `video_search` package) is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +30,131 @@ from video_search.core.model import (
 from video_search.search.search import search_videos_indexed
 
 
-def main(use_msrvtt: bool = False, max_videos: int = 100, skip_training: bool = False):
+def _ensure_outdir(path: str) -> Path:
+    outdir = Path(path)
+    outdir.mkdir(parents=True, exist_ok=True)
+    return outdir
+
+
+def export_text_tower_onnx(
+    model, tokenizer, config, outdir="models", filename="text_encoder.onnx"
+):
+    """
+    Exports TextEncoder as ONNX:
+      inputs:  input_ids[int64][B, L], attention_mask[int64][B, L]
+      outputs: embedding[float32][B, D]  (L2-normalized by your encoder)
+    """
+    model.eval()
+    text_encoder = model.text_encoder.eval().to(config.device)
+
+    # Dummy batch (dynamic axes let you vary B and L at runtime)
+    dummy = tokenizer(
+        ["hello world"],
+        padding="max_length",
+        truncation=True,
+        max_length=getattr(config, "max_text_length", 128),
+        return_tensors="pt",
+    )
+    input_ids = dummy["input_ids"].to(config.device)
+    attention_mask = dummy["attention_mask"].to(config.device)
+
+    class TextWrapper(torch.nn.Module):
+        def __init__(self, enc):
+            super().__init__()
+            self.enc = enc
+
+        def forward(self, input_ids, attention_mask):
+            return self.enc(input_ids=input_ids, attention_mask=attention_mask)
+
+    wrapped = TextWrapper(text_encoder).to(config.device)
+    _ensure_outdir(outdir)
+    out_path = str(Path(outdir) / filename)
+
+    with torch.no_grad():
+        torch.onnx.export(
+            wrapped,
+            (input_ids, attention_mask),
+            out_path,
+            export_params=True,
+            opset_version=17,
+            do_constant_folding=True,
+            input_names=["input_ids", "attention_mask"],
+            output_names=["text_embedding"],
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "seq"},
+                "attention_mask": {0: "batch", 1: "seq"},
+                "text_embedding": {0: "batch"},
+            },
+        )
+    print(f"✅ Exported text encoder ONNX → {out_path}")
+
+
+def export_video_tower_onnx(
+    model, config, outdir="models", filename="video_encoder.onnx"
+):
+    """
+    Exports VideoEncoder as ONNX:
+      input:  video[float32][B, T, 3, H, W]
+      output: embedding[float32][B, D]  (L2-normalized by your encoder)
+    """
+    model.eval()
+    video_encoder = model.video_encoder.eval().to(config.device)
+
+    T = getattr(config, "max_frames", 8)
+    H, W = getattr(config, "frame_size", (224, 224))
+    C = 3
+
+    # Dummy batch (B=1). If your runtime varies T/H/W, dynamic axes below cover it.
+    dummy_video = torch.randn(1, T, C, H, W, device=config.device, dtype=torch.float32)
+
+    class VideoWrapper(torch.nn.Module):
+        def __init__(self, enc):
+            super().__init__()
+            self.enc = enc
+
+        def forward(self, video):
+            # Your encoder expects (B, T, 3, H, W); no permute needed.
+            return self.enc(video)
+
+    wrapped = VideoWrapper(video_encoder).to(config.device)
+    _ensure_outdir(outdir)
+    out_path = str(Path(outdir) / filename)
+
+    with torch.no_grad():
+        torch.onnx.export(
+            wrapped,
+            (dummy_video,),
+            out_path,
+            export_params=True,
+            opset_version=17,
+            do_constant_folding=True,
+            input_names=["video"],
+            output_names=["embedding"],
+            dynamic_axes={
+                "video": {0: "batch", 1: "frames", 3: "height", 4: "width"},
+                "embedding": {0: "batch"},
+            },
+        )
+    print(f"✅ Exported video encoder ONNX → {out_path}")
+
+
+def run_tokenizer_export(tokenizer, outdir: str = "models"):
+    Path(outdir).mkdir(parents=True, exist_ok=True)
+    # This writes: tokenizer.json, tokenizer_config.json, special_tokens_map.json, vocab.txt, etc.
+    tokenizer.save_pretrained(outdir)
+    print(f"✅ Tokenizer saved to {outdir} (includes tokenizer.json)")
+
+
+def main(
+    use_msrvtt: bool = False,
+    max_videos: int = 100,
+    skip_training: bool = False,
+    export_onnx_text: bool = False,
+    export_onnx_video: bool = False,
+    onnx_outdir: str = "models",
+    export_tokenizer: bool = False,
+    tokenizer_outdir: str = "models",
+):
     """Main function for training video search pipeline
 
     Args:
@@ -209,8 +334,32 @@ def main(use_msrvtt: bool = False, max_videos: int = 100, skip_training: bool = 
         video_name = os.path.basename(video_path)
         print(f"  {i}. {video_name} (score: {score:.3f})")
 
+    # Optionally export to ONNX
+    if export_onnx_text:
+        export_text_tower_onnx(
+            model=model,
+            tokenizer=tokenizer,
+            config=config,
+            outdir=onnx_outdir,
+            filename="text_encoder.onnx",
+        )
+
+    if export_onnx_video:
+        export_video_tower_onnx(
+            model=model,
+            config=config,
+            outdir=onnx_outdir,
+            filename="video_encoder.onnx",
+        )
+
+    if export_tokenizer:
+        run_tokenizer_export(
+            tokenizer=tokenizer,
+            outdir=tokenizer_outdir,
+        )
+
     print(
-        f"\nTraining completed! Use search_interactive.py to search with saved model and index."
+        "\nTraining completed! Use search_interactive.py to search with saved model and index."
     )
     print(f"Model: {config.model_save_path}")
     print(f"Index: {config.index_save_path}")
@@ -235,6 +384,33 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip training and build index from existing trained model",
     )
+    parser.add_argument(
+        "--export-onnx-text",
+        action="store_true",
+        help="Export the trained/loaded text tower to ONNX",
+    )
+    parser.add_argument(
+        "--export-onnx-video",
+        action="store_true",
+        help="Export the trained/loaded video tower to ONNX",
+    )
+    parser.add_argument(
+        "--onnx-outdir",
+        type=str,
+        default="models",
+        help="Directory to write ONNX files (default: models)",
+    )
+    parser.add_argument(
+        "--export-tokenizer",
+        action="store_true",
+        help="Export the tokenizer (writes tokenizer.json next to the model).",
+    )
+    parser.add_argument(
+        "--tokenizer-outdir",
+        type=str,
+        default="models",
+        help="Directory to write tokenizer files (default: models)",
+    )
     args = parser.parse_args()
 
     use_msrvtt = args.dataset == "msrvtt"
@@ -242,4 +418,9 @@ if __name__ == "__main__":
         use_msrvtt=use_msrvtt,
         max_videos=args.max_videos,
         skip_training=args.skip_training,
+        export_onnx_text=args.export_onnx_text,
+        export_onnx_video=args.export_onnx_video,
+        onnx_outdir=args.onnx_outdir,
+        export_tokenizer=args.export_tokenizer,
+        tokenizer_outdir=args.tokenizer_outdir,
     )

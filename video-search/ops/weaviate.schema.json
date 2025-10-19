@@ -1,0 +1,60 @@
+{
+    "class": "VideoClip",
+    "vectorizer": "none",
+    "vectorIndexType": "hnsw",
+    "vectorIndexConfig": {
+        "distance": "cosine",
+        "efConstruction": 128,
+        "maxConnections": 16
+    },
+    "properties": [
+        {
+            "name": "video_id",
+            "dataType": [
+                "text"
+            ]
+        },
+        {
+            "name": "start_s",
+            "dataType": [
+                "number"
+            ]
+        },
+        {
+            "name": "end_s",
+            "dataType": [
+                "number"
+            ]
+        },
+        {
+            "name": "title",
+            "dataType": [
+                "text"
+            ]
+        },
+        {
+            "name": "channel",
+            "dataType": [
+                "text"
+            ]
+        },
+        {
+            "name": "url",
+            "dataType": [
+                "text"
+            ]
+        },
+        {
+            "name": "caption",
+            "dataType": [
+                "text"
+            ]
+        },
+        {
+            "name": "tags",
+            "dataType": [
+                "text[]"
+            ]
+        }
+    ]
+}

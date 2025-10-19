@@ -75,6 +75,10 @@ python scripts/search_cli.py "cat playing with toy"
 python scripts/search_cli.py "cooking pasta" --format json --top-k 3
 ```
 
+### 3. (Optional) Serve as a Weaviate-backed API
+If you want to expose the model through the Rust HTTP API and Weaviate, follow the
+deployment guide in [Deploying the Docker API](#deploying-the-docker-api).
+
 ## System Requirements
 
 - **Python**: 3.12+
@@ -189,6 +193,130 @@ python scripts/search_interactive.py [--top-k N] [--model-path PATH] [--index-pa
 ```bash
 python scripts/search_cli.py "query" [--top-k N] [--format table|json|simple] [--quiet]
 ```
+
+## Deploying the Docker API
+
+These steps take you from a trained checkpoint to a Weaviate-backed HTTP API that
+serves semantic search results from the `api/` crate.
+
+### 0. Preconditions
+- You have already run the training pipeline at least once.
+- The `models/` directory contains `video_search_model.pth` and the pre-built
+  `video_index.pkl` produced by the pipeline.
+
+### 1. Export the text tower to ONNX (and tokenizer)
+Re-run the pipeline with export flags so the API can load the text encoder via
+ONNX Runtime. The command below trains if needed, builds the index, exports the
+tokenizer, and writes the ONNX file under `models/`:
+
+```bash
+python scripts/pipeline.py \
+  --dataset msrvtt \
+  --max-videos 100 \
+  --skip-training \
+  --export-onnx-text \
+  --export-tokenizer \
+  --onnx-outdir models \
+  --tokenizer-outdir models
+```
+
+Tips:
+- Drop `--skip-training` if you want to fine-tune before exporting.
+- The ONNX export will default to opset 18. You can request `--export-onnx-text`
+  even if you already have a model – the command regenerates `models/text_encoder.onnx`.
+
+### 2. Push fresh embeddings to Weaviate
+Weaviate needs the latest vectors for the clips you want to serve. Use the helper
+script to (re)create the `VideoClip` class and batch upsert the embeddings:
+
+```bash
+python scripts/build_and_push_weaviate.py \
+  --dataset msrvtt \
+  --max-videos 100 \
+  --normalize \
+  --channel msrvtt
+```
+
+Notes:
+- Omit `--skip-build` unless you intentionally want to reuse the cached
+  `video_index.pkl`. Reusing it repeatedly will duplicate objects in Weaviate.
+- The script auto-creates the `VideoClip` schema if it is missing.
+- To wipe the class entirely, run:
+  `./scripts/delete-weaviate-schema.sh` (requires Weaviate offline).
+- The Weaviate class can be created alternatively with `./scripts/create-weaviate-schema.sh`
+
+### 3. Start Weaviate + API via Docker Compose
+
+The repo already ships with a `docker-compose.yml` that launches Weaviate and the
+Rust API. Build the image (once per change) and start the stack:
+
+```bash
+# From repo root
+docker compose build api
+docker compose up -d
+```
+
+Key details:
+- Weaviate listens on `http://localhost:8080`; the API runs on `http://localhost:8088`.
+- The compose file mounts `./models` read-only, so the container picks up
+  `text_encoder.onnx` and `tokenizer.json` automatically.
+- You can follow logs with `docker compose logs -f api`.
+- `WEAVIATE_URL` defaults to `http://weaviate:8080` inside Docker. Override via
+  env var if you run the API outside Compose.
+
+### 4. Query the HTTP API
+
+Send JSON payloads to `/v1/query/text`:
+
+```bash
+curl -s -X POST http://localhost:8088/v1/query/text \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "q": "cat videos",
+        "top_k": 5,
+        "channel": "msrvtt"
+      }' | jq
+```
+
+Example output:
+```json
+{
+  "results": [
+    {
+      "video_id": "video57",
+      "title": "video57.mp4",
+      "url": "file://./data/msrvtt/videos/video57.mp4",
+      "start_s": 0.0,
+      "end_s": 0.0,
+      "distance": 0.15331495,
+      "score": null
+    }
+  ]
+}
+```
+
+The response lists the top-k clips with the cosine distance returned by Weaviate.
+`ef_search` is optional and currently ignored by Weaviate 1.32’s GraphQL API.
+
+### 5. Verify or debug with helper scripts
+
+- `scripts/query_weaviate.py "cat videos" --onnx models/text_encoder.onnx`
+  performs the exact same ONNX + GraphQL flow from your shell.
+- `scripts/build_and_push_weaviate.py` ensures the schema exists; rerun it any
+  time you refresh embeddings.
+- To inspect schema or counts manually:
+  ```bash
+  curl -s http://localhost:8080/v1/schema | jq
+  curl -s -X POST http://localhost:8080/v1/graphql \
+       -H 'Content-Type: application/json' \
+       -d '{"query":"{Aggregate{VideoClip{meta{count}}}}"}' | jq
+  ```
+
+### 6. Cleaning up
+
+Stop the services with `docker compose down`. Include `-v` if you also want to
+drop Weaviate’s local volume. Re-run steps 2–4 whenever you produce new model
+weights or a fresh ONNX export.
 
 ## Example Output
 

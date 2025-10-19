@@ -81,62 +81,106 @@ class VideoQueryDataset(Dataset):
 
 
 def download_youtube_clip(
-    youtube_url: str, output_path: str, start_time: float, end_time: float
+    youtube_url: str,
+    output_path: str,
+    start_time: float,
+    end_time: float,
+    verbose: bool = False
 ) -> bool:
-    """Download a specific clip from a YouTube video using yt-dlp and ffmpeg"""
-    try:
-        print(
-            f"Downloading video from {youtube_url}, start_time={start_time} and end_time={end_time}"
-        )
-        # Create temporary file for full video
-        temp_video = output_path + ".temp.%(ext)s"
-        duration = end_time - start_time
+    """Download a specific clip from a YouTube video using yt-dlp and ffmpeg
 
-        # Download the specific segment using yt-dlp with ffmpeg
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "--external-downloader",
-                "ffmpeg",
-                "--external-downloader-args",
-                f"ffmpeg_i:-ss {start_time} -t {duration}",
-                "-o",
-                temp_video,
-                "--no-playlist",
-                "--format",
-                "best[height<=480]",  # Lower quality for faster download
-                youtube_url,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+    Tries multiple format options to maximize success rate
 
-        if result.returncode != 0:
-            print(f"yt-dlp failed: {result.stderr}")
-            return False
+    Args:
+        youtube_url: URL of the YouTube video
+        output_path: Path to save the downloaded clip
+        start_time: Start time in seconds
+        end_time: End time in seconds
+        verbose: If True, print detailed error messages for debugging
+    """
+    # Format options to try in order of preference
+    format_options = [
+        "best[height<=480][ext=mp4]",  # Best mp4 up to 480p
+        "worst[ext=mp4]",  # Worst quality mp4
+        "best[height<=360]",  # Very low quality, any format
+        "worst",  # Absolute worst quality available
+    ]
 
-        # Find the downloaded file (yt-dlp adds extension)
-        temp_files = glob.glob(output_path + ".temp.*")
-        if not temp_files:
-            print(f"No temporary file found for {youtube_url}")
-            return False
+    last_error = None
+    for format_option in format_options:
+        try:
+            # Clean up any previous temporary files
+            for temp_file in glob.glob(output_path + ".temp.*"):
+                try:
+                    os.remove(temp_file)
+                except OSError:
+                    pass
 
-        # Move to final location
-        temp_file = temp_files[0]
-        os.rename(temp_file, output_path)
+            # Create temporary file for full video
+            temp_video = output_path + ".temp.%(ext)s"
+            duration = end_time - start_time
 
-        return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            # Download the specific segment using yt-dlp with ffmpeg
+            result = subprocess.run(
+                [
+                    "yt-dlp",
+                    "--external-downloader",
+                    "ffmpeg",
+                    "--external-downloader-args",
+                    f"ffmpeg_i:-ss {start_time} -t {duration}",
+                    "-o",
+                    temp_video,
+                    "--no-playlist",
+                    "--format",
+                    format_option,
+                    "--no-warnings",  # Reduce noise
+                    youtube_url,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
 
-    except Exception as e:
-        print(f"Failed to download clip from {youtube_url}: {e}")
-        # Clean up any temporary files
-        for temp_file in glob.glob(output_path + ".temp.*"):
-            try:
-                os.remove(temp_file)
-            except:
-                pass
-        return False
+            if result.returncode == 0:
+                # Find the downloaded file (yt-dlp adds extension)
+                temp_files = glob.glob(output_path + ".temp.*")
+                if temp_files:
+                    # Move to final location
+                    temp_file = temp_files[0]
+                    os.rename(temp_file, output_path)
+
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                        return True
+            else:
+                # Store the error for verbose output
+                last_error = result.stderr
+
+        except subprocess.TimeoutExpired:
+            last_error = "Timeout"
+            if verbose:
+                print(f"Timeout downloading {youtube_url} with format {format_option}")
+            continue
+        except Exception as e:
+            last_error = str(e)
+            if verbose:
+                print(f"Error with format {format_option}: {e}")
+            continue
+
+    # All formats failed
+    if verbose and last_error:
+        print(f"Failed to download {youtube_url}")
+        print(f"Last error: {last_error[:200]}")  # First 200 chars of error
+    else:
+        print(f"Failed to download {youtube_url} after trying all format options")
+
+    # Clean up any temporary files
+    for temp_file in glob.glob(output_path + ".temp.*"):
+        try:
+            os.remove(temp_file)
+        except OSError:
+            pass
+
+    return False
 
 
 def load_msrvtt_dataset(
@@ -200,12 +244,34 @@ def load_msrvtt_dataset(
 
     triplets = []
     failed_downloads = 0
+    successful_videos = 0
 
-    for video_id, video_data in tqdm(video_captions.items(), desc="Creating triplets"):
+    # Convert to list for easier iteration with retry logic
+    video_items = list(video_captions.items())
+
+    # If max_videos is specified, keep trying until we get that many successful videos
+    target_videos = max_videos if max_videos else len(video_items)
+
+    pbar = tqdm(total=target_videos, desc="Creating triplets")
+
+    # Track skipped videos for summary
+    skipped_videos = 0
+
+    # Iterate through all available videos until we reach target or run out
+    for video_id, video_data in video_items:
+        # Check if we've reached the target
+        if successful_videos >= target_videos:
+            break
+
         video_path = os.path.join(video_dir, f"{video_id}.mp4")
 
-        # Download video clip if not exists
-        if not os.path.exists(video_path):
+        # Check if video already exists and has valid size
+        if os.path.exists(video_path) and os.path.getsize(video_path) > 0:
+            # Video already downloaded, skip download
+            skipped_videos += 1
+            print(f"✓ Skipping {video_id} (already exists, {os.path.getsize(video_path) / 1024:.1f} KB)")
+        else:
+            # Download video clip
             if not download_youtube_clip(
                 video_data["url"],
                 video_path,
@@ -213,7 +279,12 @@ def load_msrvtt_dataset(
                 video_data["end_time"],
             ):
                 failed_downloads += 1
+                # Continue to try next video
                 continue
+
+        # Successfully have a video (either downloaded or already existed)
+        successful_videos += 1
+        pbar.update(1)
 
         # For each caption, create a separate triplet
         for caption in video_data["captions"]:
@@ -230,9 +301,39 @@ def load_msrvtt_dataset(
             )
             triplets.append(triplet)
 
-    print(f"Created {len(triplets)} triplets from {len(video_captions)} videos")
+    pbar.close()
+
+    # Calculate statistics
+    newly_downloaded = successful_videos - skipped_videos
+    total_attempted = successful_videos + failed_downloads
+    success_rate = (successful_videos / total_attempted * 100) if total_attempted > 0 else 0
+
+    print(f"\n{'='*60}")
+    print(f"Dataset Loading Summary:")
+    print(f"{'='*60}")
+    print(f"Successfully obtained: {successful_videos} videos")
+    print(f"  - Already cached: {skipped_videos} videos")
+    print(f"  - Newly downloaded: {newly_downloaded} videos")
+    print(f"Failed downloads: {failed_downloads} videos")
+    print(f"Total attempted: {total_attempted} videos")
+    print(f"Success rate: {success_rate:.1f}%")
+    print(f"Created {len(triplets)} training triplets")
+    print(f"{'='*60}\n")
+
     if failed_downloads > 0:
-        print(f"Failed to download {failed_downloads} videos")
+        print("ℹ️  Note: Video download failures are common with YouTube datasets.")
+        print("   Reasons include: deleted videos, geographic restrictions, age gates,")
+        print("   copyright takedowns, or removed channels.")
+        print("   The system will continue with successfully downloaded videos.\n")
+
+        # Provide recommendations based on success rate
+        if success_rate < 50:
+            print(f"⚠️  Warning: Low success rate ({success_rate:.1f}%).")
+            print("   Consider increasing --max-videos to ensure enough training data.")
+            print("   The dataset will automatically retry until target is reached.\n")
+        elif successful_videos < 50:
+            print("💡 Tip: For better model performance, consider downloading more videos.")
+            print("   Run with --max-videos 200 or higher to get more training data.\n")
 
     return triplets
 

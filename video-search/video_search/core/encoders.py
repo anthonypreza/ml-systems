@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchvision.models import resnet50
+from torchvision.models import resnet50, ResNet50_Weights
 
 from typing import List, Dict
 from transformers import AutoTokenizer, AutoModel
@@ -75,7 +75,9 @@ class VideoEncoder(nn.Module):
         super().__init__()
 
         # Use ResNet50 as image encoder for video frames
-        self.image_encoder = resnet50(pretrained=pretrained)
+        # Use the new weights parameter instead of deprecated pretrained
+        weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+        self.image_encoder = resnet50(weights=weights)
 
         # Remove the final classification layer
         self.image_encoder = nn.Sequential(*list(self.image_encoder.children())[:-1])

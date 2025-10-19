@@ -1,0 +1,27 @@
+services:
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    restart: unless-stopped
+    environment:
+      QUERY_DEFAULTS_LIMIT: "20"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      CLUSTER_HOSTNAME: "weaviate"
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+  api:
+    build: ./api
+    depends_on:
+      - weaviate
+    environment:
+      RUST_LOG: info
+      WEAVIATE_URL: http://weaviate:8080
+      MODEL_PATH: /models/text_encoder.onnx
+      TOKENIZER_PATH: /models/tokenizer.json
+      EMB_DIM: "512"
+      PORT: "8088"
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8088:8088"
